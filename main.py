@@ -97,28 +97,28 @@ def get_gspread_client():
 def update_google_sheet(data):
     """Appends a new row to the appropriate market tab in Google Sheets."""
     try:
-        print("-> Attempting to connect to Google Sheets...")
+        print("-> [update_google_sheet] Attempting to connect to Google Sheets...")
         client = get_gspread_client()
-        print("-> Connection successful.")
+        print("-> [update_google_sheet] Connection successful.")
 
         sheet_name = os.getenv("GOOGLE_SHEET_NAME", "CER_Report")
-        print(f"-> Opening spreadsheet: '{sheet_name}'")
+        print(f"-> [update_google_sheet] Opening spreadsheet: '{sheet_name}'")
         spreadsheet = client.open(sheet_name)
-        print("-> Spreadsheet opened successfully.")
+        print("-> [update_google_sheet] Spreadsheet opened successfully.")
 
         market = data.get("Market", "Unknown")
-        print(f"-> Market determined as: '{market}'")
+        print(f"-> [update_google_sheet] Market determined as: '{market}'")
 
         # Get or create the worksheet for the market
         try:
             worksheet = spreadsheet.worksheet(market)
-            print(f"-> Found existing worksheet tab: '{market}'")
+            print(f"-> [update_google_sheet] Found existing worksheet tab: '{market}'")
         except gspread.WorksheetNotFound:
-            print(f"-> Worksheet tab not found. Creating new tab: '{market}'")
+            print(f"-> [update_google_sheet] Worksheet tab not found. Creating new tab: '{market}'")
             worksheet = spreadsheet.add_worksheet(title=market, rows="100", cols="20")
             header = ["Forwarded Date", "Market", "Ardent CER#", "Capital $", "Notes", "Mfg", "Model", "ETA/Install", "URL", "Source Email"]
             worksheet.append_row(header)
-            print("-> Header row added to new worksheet.")
+            print("-> [update_google_sheet] Header row added to new worksheet.")
 
         # Prepare and append the data row
         row_to_add = [
@@ -133,13 +133,13 @@ def update_google_sheet(data):
             data.get("URL", ""),
             data.get("Source Email", "")
         ]
-        print(f"-> Preparing to add row: {row_to_add}")
+        print(f"-> [update_google_sheet] Preparing to add row: {row_to_add}")
         worksheet.append_row(row_to_add)
-        print(f"✅ Successfully wrote data to tab: '{market}'")
+        print(f"✅ [update_google_sheet] Successfully wrote data to tab: '{market}'")
 
     except Exception as e:
         # This will now print the exact type and message of the error
-        print(f"❌ ERROR: Failed to update Google Sheet. Reason: {type(e).__name__} - {e}")
+        print(f"❌ [update_google_sheet] ERROR: Failed to update Google Sheet. Reason: {type(e).__name__} - {e}")
 
 # --- Main Webhook Endpoint ---
 @app.route("/webhook", methods=['POST'])
@@ -147,7 +147,6 @@ def handle_email():
     """This endpoint receives email data from SendGrid."""
     print("📧 Webhook received a new email.")
     
-    # SendGrid sends email data as multipart/form-data
     email_body = request.form.get('text')
     email_from = request.form.get('from')
     
@@ -155,25 +154,31 @@ def handle_email():
         return "Failed: No email body content.", 400
 
     try:
+        print("-> [handle_email] Initializing Gemini Processor...")
         gemini = GeminiProcessor()
+        print("-> [handle_email] Gemini Initialized. Extracting data...")
         extracted_data = gemini.extract_data_from_email(email_body)
+        print(f"-> [handle_email] Data extracted: {extracted_data}")
         
         cer_number = str(extracted_data.get("Ardent CER#", ""))
         if not cer_number:
-            print("❌ Failed: Could not extract CER# from email.")
+            print("❌ [handle_email] Failed: Could not extract CER# from email.")
             return "Failed: Could not extract CER#.", 400
 
+        print("-> [handle_email] Processing extracted data...")
         extracted_data["Forwarded Date"] = format_date_string(extracted_data.get("Forwarded Date"))
         extracted_data["Market"] = get_market_from_cer(cer_number)
         extracted_data["Source Email"] = email_from
+        print(f"-> [handle_email] Data processed. Passing to sheet updater: {extracted_data}")
         
         # Update the shared Google Sheet
         update_google_sheet(extracted_data)
         
+        print("-> [handle_email] process complete.")
         return "✅ Success: Email processed and sheet updated.", 200
 
     except Exception as e:
-        print(f"CRITICAL ERROR during email processing: {e}")
+        print(f"CRITICAL ERROR during email processing: {type(e).__name__} - {e}")
         return f"Internal server error: {e}", 500
 
 # Health check endpoint

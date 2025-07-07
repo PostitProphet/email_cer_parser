@@ -97,20 +97,28 @@ def get_gspread_client():
 def update_google_sheet(data):
     """Appends a new row to the appropriate market tab in Google Sheets."""
     try:
+        print("-> Attempting to connect to Google Sheets...")
         client = get_gspread_client()
+        print("-> Connection successful.")
+
         sheet_name = os.getenv("GOOGLE_SHEET_NAME", "CER_Report")
+        print(f"-> Opening spreadsheet: '{sheet_name}'")
         spreadsheet = client.open(sheet_name)
-        
+        print("-> Spreadsheet opened successfully.")
+
         market = data.get("Market", "Unknown")
-        
+        print(f"-> Market determined as: '{market}'")
+
         # Get or create the worksheet for the market
         try:
             worksheet = spreadsheet.worksheet(market)
+            print(f"-> Found existing worksheet tab: '{market}'")
         except gspread.WorksheetNotFound:
+            print(f"-> Worksheet tab not found. Creating new tab: '{market}'")
             worksheet = spreadsheet.add_worksheet(title=market, rows="100", cols="20")
-            # Add header row to the new sheet
             header = ["Forwarded Date", "Market", "Ardent CER#", "Capital $", "Notes", "Mfg", "Model", "ETA/Install", "URL", "Source Email"]
             worksheet.append_row(header)
+            print("-> Header row added to new worksheet.")
 
         # Prepare and append the data row
         row_to_add = [
@@ -125,12 +133,13 @@ def update_google_sheet(data):
             data.get("URL", ""),
             data.get("Source Email", "")
         ]
+        print(f"-> Preparing to add row: {row_to_add}")
         worksheet.append_row(row_to_add)
         print(f"✅ Successfully wrote data to tab: '{market}'")
-        
-    except Exception as e:
-        print(f"❌ ERROR: Failed to update Google Sheet. Reason: {e}")
 
+    except Exception as e:
+        # This will now print the exact type and message of the error
+        print(f"❌ ERROR: Failed to update Google Sheet. Reason: {type(e).__name__} - {e}")
 
 # --- Main Webhook Endpoint ---
 @app.route("/webhook", methods=['POST'])
